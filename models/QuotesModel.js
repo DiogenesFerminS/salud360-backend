@@ -1,14 +1,4 @@
-import mysql from "mysql2/promise";
-
-const config ={
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    port: process.env.DB_PORT,
-    password:process.env.DB_PASSWORD,
-    database:process.env.DB_NAME   
-};
-
-const connection = await mysql.createConnection(config);
+import db from "../db/connection.js"
 
 export class QuotesModel {
 
@@ -17,7 +7,7 @@ export class QuotesModel {
         try {
             const {name, lastname, symptoms, date, hour_start, hour_end, phone, email, owner} = quote;
 
-            const [resp, tableInfo] = await connection.query(
+            const [resp, tableInfo] = await db.query(
                 `INSERT INTO quotes (name, lastname ,symptoms, appointment_date, hour_start, hour_end, phone, email, owner) 
                 VALUES 
                 (?, ?, ?, ?, ?, ?, ?, ?, UUID_TO_BIN(?));
@@ -34,7 +24,7 @@ export class QuotesModel {
 
     static getQuotes = async({owner}) =>{
         try {
-            const [resp, tableInfo] = await connection.query(
+            const [resp, tableInfo] = await db.query(
                 `SELECT BIN_TO_UUID(id) as id, name, symptoms, appointment_date, hour_start, hour_end, filled, phone, email, BIN_TO_UUID(owner) as owner 
                 FROM quotes WHERE owner = UUID_TO_BIN(?);`, [owner]
             );
@@ -54,7 +44,7 @@ export class QuotesModel {
 
         try {
             
-            const [resp , info] = await connection.query(
+            const [resp , info] = await db.query(
                 `SELECT BIN_TO_UUID(id) as id, name, lastname ,symptoms, appointment_date, hour_start, hour_end, filled, phone, email, BIN_TO_UUID(owner) as owner 
                 FROM quotes WHERE id = UUID_TO_BIN(?)`,[id]
             );
@@ -87,7 +77,7 @@ export class QuotesModel {
 
         try {
             
-            const [resp , info] = await connection.query(
+            const [resp , info] = await db.query(
                 `SELECT BIN_TO_UUID(id) as id, name, lastname , symptoms, appointment_date, hour_start, hour_end, filled, phone, email, BIN_TO_UUID(owner) as owner 
                 FROM quotes WHERE id = UUID_TO_BIN(?)`,[id]
             );
@@ -129,7 +119,7 @@ export class QuotesModel {
 
         try {
             
-            const [resp, tableInfo] = await connection.query(
+            const [resp, tableInfo] = await db.query(
                 `
                 UPDATE quotes 
                 SET name = ?, lastname = ?, symptoms = ?, appointment_date = ?, 
@@ -151,7 +141,7 @@ export class QuotesModel {
 
         try {
             
-            const [resp , info] = await connection.query(
+            const [resp , info] = await db.query(
                 `SELECT BIN_TO_UUID(id) as id, name, lastname , symptoms, appointment_date, hour_start, hour_end, filled, phone, email, BIN_TO_UUID(owner) as owner 
                 FROM quotes WHERE id = UUID_TO_BIN(?)`,[id]
             );
@@ -178,7 +168,7 @@ export class QuotesModel {
 
         try {
             
-            const [resp, info] = await connection.query(
+            const [resp, info] = await db.query(
                 `DELETE FROM quotes WHERE id = UUID_TO_BIN(?);`,[id]
             );
 

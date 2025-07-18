@@ -15,17 +15,37 @@ export class UsersController{
 
     login = async(req, res)=>{
         const {body} = req;
-
         const authUser = await this.usersModel.login({input:body});
 
-        res.json({JWT: authUser})
+        res.cookie("TokenSalud360", authUser ,{
+            httpOnly:true,
+            path:'/',
+            secure:false,
+            sameSite:'lax',
+            maxAge: 1000 * 60 * 60 * 24 * 30,
+        })
+
+        res.json({message: "Successful login"})
+        
     };
 
     profile = async(req, res)=>{
+        res.json({...req.user});
 
-        res.json({user: req.user});
-        
     };
+
+    logout = async(req, res)=>{
+
+        res.cookie('TokenSalud360', null, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'none',
+            maxAge: 0,
+            path: '/'
+        })
+
+        res.json({message:"Successful logout"});
+    }
 
     confirm = async(req, res)=>{
         const {token} = req.params;
@@ -52,7 +72,7 @@ export class UsersController{
         const {message} = await this.usersModel.comprobarToken({token});
 
         res.json({message});
-    }
+    };
 
     newPassword = async(req, res)=>{
         const {token} = req.params;
@@ -61,5 +81,14 @@ export class UsersController{
         const {message} = await this.usersModel.newPassword({token, password});
 
         res.json({message});
+    };
+
+    addProfilePhoto = async(req, res)=>{
+        const {user:{id}} = req;
+        const {file} = req
+
+        const {url} = await this.usersModel.addProfilePhoto({id, file});
+        
+        res.json({result: {url, msg: "Successful update"}});
     }
 }

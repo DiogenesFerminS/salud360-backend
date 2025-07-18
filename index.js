@@ -1,19 +1,30 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { json } from "express";
 import userRouter from "./routes/usersRoutes.js";
 import quotesRouter from "./routes/quotesRoutes.js";
 import { corsMiddleware } from "./middlewares/cors.js";
+import cookieParser from "cookie-parser";
+import officesRouter from "./routes/officesRoutes.js"
+import scheduleRouter from "./routes/scheduleRoutes.js"
 
 const PORT = process.env.PORT ?? 3000;
 
 const app = express();
-
 app.use(corsMiddleware());
+
+app.use(cookieParser());
 
 app.use(json()); 
 
 app.use('/api/users', userRouter);
 
 app.use('/api/patients', quotesRouter );
+
+app.use('/api/offices', officesRouter);
+
+app.use('/api/schedule', scheduleRouter);
 
 app.all('/*splat', (req, res, next)=>{
     res.status(404).json({message: 'Route not found'});

@@ -1,22 +1,12 @@
-import mysql from "mysql2/promise";
-import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import generateJWT from "../helpers/generateJWT.js";
 import generateToken from "../helpers/generateToken.js";
 import { emailRegister } from "../helpers/emailRegister.js";
 import { emailRecoverPassword } from "../helpers/emailRecoverPassword.js";
+import cloudinary from "../helpers/cloudinary.config.js";
+import streamifier from "streamifier";
 
-dotenv.config();
-
-const config = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    port: process.env.DB_PORT,
-    password:process.env.DB_PASSWORD,
-    database:process.env.DB_NAME
-};
-
-const connection = await mysql.createConnection(config);
+import db from "../db/connection.js"
 
 export class UsersModel {
     
@@ -25,7 +15,7 @@ export class UsersModel {
         const {name, lastname, email, phone, password} = input;
         const token = generateToken();
         
-        const existUser = await connection.query(
+        const existUser = await db.query(
             `SELECT * FROM users WHERE email = ? OR phone = ? OR token = ?;`, [email, phone, token]
         );
 
@@ -35,14 +25,14 @@ export class UsersModel {
             throw error;
         };    
         
-        const uuidResult = await connection.query(
+        const uuidResult = await db.query(
             `SELECT UUID() uuid`
         );
 
         const [{uuid}] = uuidResult[0];
         const passwordHashed = await bcrypt.hash(password, parseInt(process.env.ROUNDS_SALT));
         try {
-            const result = await connection.query(
+            const result = await db.query(
                 `INSERT INTO users (id, name, lastname, password, email, phone, token) 
                  VALUES (UUID_TO_BIN("${uuid}"), ?, ?, ?, ?, ?, ?);
                 `, [name, lastname, passwordHashed , email, phone, token]
@@ -53,7 +43,7 @@ export class UsersModel {
             throw error;
         };
 
-        const [newUser, tableInfo] = await connection.query(
+        const [newUser, tableInfo] = await db.query(
             `SELECT BIN_TO_UUID(id) as id, name, lastname,password, email, phone, token, confirm FROM users
             WHERE id = UUID_TO_BIN(?);
             `, [uuid]
@@ -70,7 +60,7 @@ export class UsersModel {
 
     static confirm = async({token})=>{
         
-        const [user, tableInfo] = await connection.query(
+        const [user, tableInfo] = await db.query(
             `SELECT BIN_TO_UUID(id) as id, name, lastname, email,
             phone, token, confirm FROM users WHERE token = ?;
             `, [token]
@@ -84,7 +74,7 @@ export class UsersModel {
 
         const [{id}] = user;
 
-        const [updateUser, info] = await connection.query(
+        const [updateUser, info] = await db.query(
             `UPDATE users SET token = null, confirm = TRUE WHERE id = UUID_TO_BIN(?); `, [id]
         );
 
@@ -99,7 +89,7 @@ export class UsersModel {
 
     static login = async({input})=>{
         const {email, password} = input;
-        const [exist, info] = await connection.query(
+        const [exist, info] = await db.query(
             `SELECT BIN_TO_UUID(id) as id, name, lastname,password, email, phone, token, confirm FROM users WHERE email = ?`, [email]
         );
         
@@ -133,11 +123,11 @@ export class UsersModel {
 
     static findOneById = async ({id})=>{
 
-        const [res, info] = await connection.query(
-            `SELECT BIN_TO_UUID(id) as id, name, lastname, email, phone FROM users WHERE id = UUID_TO_BIN(?)`,[id] 
+        const [res, info] = await db.query(
+            `SELECT BIN_TO_UUID(id) as id, name, lastname, email, phone, profilePhoto FROM users WHERE id = UUID_TO_BIN(?)`,[id] 
         );
 
-        const [{id:id_r, name:name_r, lastname:last_r, email:email_r, phone:phone_r }] = res;
+        const [{id:id_r, name:name_r, lastname:last_r, email:email_r, phone:phone_r, profilePhoto:profile_r }] = res;
 
         const user = {
             id: id_r,
@@ -145,13 +135,14 @@ export class UsersModel {
             lastname: last_r,
             email: email_r,
             phone: phone_r,
+            profilePhoto:profile_r
         };
         return user;
     };
 
     static recoverPassword = async ({email})=>{
         
-        const [res, tableInfo] = await connection.query(
+        const [res, tableInfo] = await db.query(
             `SELECT BIN_TO_UUID(id) as id, name, lastname, password, email, phone, token, confirm FROM users WHERE email = ?;`, [email]
         );
 
@@ -166,7 +157,7 @@ export class UsersModel {
         try {
             const newToken = generateToken();
 
-            const [update, info] = await connection.query(
+            const [update, info] = await db.query(
                 `
                 UPDATE users
                 SET token = ?
@@ -189,7 +180,7 @@ export class UsersModel {
 
     static comprobarToken = async({token})=>{
 
-        const [resp, tableInfo] = await connection.query(
+        const [resp, tableInfo] = await db.query(
             `SELECT BIN_TO_UUID(id) as id, name, lastname, password, email, phone, token, confirm FROM users WHERE token = ?;`, [token]
         );
 
@@ -204,7 +195,7 @@ export class UsersModel {
 
     static newPassword = async({token, password})=>{
 
-        const [resp, tableInfo] = await connection.query(
+        const [resp, tableInfo] = await db.query(
              `SELECT BIN_TO_UUID(id) as id, name, lastname, password, email, phone, token, confirm FROM users WHERE token = ?;`, [token]
         );
 
@@ -219,7 +210,7 @@ export class UsersModel {
 
         try {
             
-            const update = await connection.query(
+            const update = await db.query(
                 `
                 UPDATE users 
                 SET token = NULL, password = ?
@@ -234,6 +225,57 @@ export class UsersModel {
             throw err;
         }
 
+    };
+
+    static addProfilePhoto = async({id, file})=>{
+        try {
+            
+            const streamUpload = ()=>{
+                return new Promise((resolve,reject)=>{
+                    const stream = cloudinary.uploader.upload_stream(
+                        {
+                            upload_preset:"salud360-profile",
+                            transformation: [
+                                {width:400, crop:"limit"},
+                                {quality:"auto"},
+                                {fetch_format: "auto"}
+                            ],                            
+                        },
+                        (error, result)=>{
+                            if(result){
+                                resolve(result);
+                            }else{
+                                reject(error)
+                            }
+                        }
+                    );
+
+                    streamifier.createReadStream(file.buffer).pipe(stream);
+                })
+            }
+
+            const cloudResp = await streamUpload();
+            const {public_id, format} = cloudResp;
+            const photoId = `${public_id}.${format}`;
+
+            const url = `https://res.cloudinary.com/dqclkzb8r/image/upload/w_400,q_auto,f_auto/${photoId}`;
+
+            const update = await db.query(
+           `
+            UPDATE users
+            SET profilePhoto = ? 
+            WHERE id = UUID_TO_BIN(?);
+           `, [url, id]
+        );
+        
+        return {url};
+            
+        } catch (error) {
+            const err = new Error("Failed upload");
+            err.status = 404;
+            throw err
+        }
+        
     }
     
 }
